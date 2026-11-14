@@ -36,7 +36,7 @@ from credit_risk.modeling.threshold import (
 )
 from credit_risk.scoring.frame import prepare_frame
 from credit_risk.scoring.model import META_FILE, MODEL_FILE
-from credit_risk.synth import make_synthetic_sample
+from credit_risk.synth import write_sample
 
 PARAMS_PATH = PROJECT_ROOT / "config" / "lgbm_params.json"
 SEGMENTS = ("overall", "thin_file", "no_bureau")
@@ -63,7 +63,9 @@ def _feature_stats(train: pd.DataFrame, features: list[str]) -> dict[str, dict]:
         if name in CATEGORICAL:
             entry["top"] = s.value_counts().head(1).index.tolist()
         else:
-            q = s.quantile([0.0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1.0])
+            q = s.quantile(
+                [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
+            )  # no min/max: those are single real applicants
             entry.update(
                 {
                     f"p{round(k * 100):02d}": (None if pd.isna(v) else round(float(v), 6))
@@ -350,11 +352,9 @@ def train(
     log(f"Saved {model_path} ({model_path.stat().st_size / 1e6:.1f} MB), version {version}")
 
     # --- synthetic sample for the demo / CI
-    sample = make_synthetic_sample(train_df, input_features, CATEGORICAL, settings.seed)
-    settings.sample_dir.mkdir(parents=True, exist_ok=True)
     sample_path = settings.sample_dir / "synthetic_applicants.csv"
-    sample.to_csv(sample_path, index=False, float_format="%.6g", lineterminator="\n")
-    log(f"Wrote {len(sample)} synthetic applicants -> {sample_path}")
+    sample = write_sample(train_df, input_features, CATEGORICAL, settings.seed, sample_path)
+    log(f"Wrote {len(sample)} synthetic applicants (0 copies of real rows) -> {sample_path}")
 
     timings["total_s"] = time.perf_counter() - t_start
     results = {

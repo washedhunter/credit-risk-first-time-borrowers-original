@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from credit_risk.scoring.feature_info import GROUPS, info
 
@@ -20,7 +20,43 @@ def _bounds(name: str, kind: str) -> dict[str, float]:
         return {"ge": 0, "le": 1}
     if kind in ("count", "years"):
         return {"ge": 0}
+    if name.startswith("AMT_"):  # application amounts (bureau/card balances can be negative)
+        return {"ge": 0}
     return {}
+
+
+class ApplicantBase(BaseModel):
+    """Cross-field checks: history aggregates must agree with the history counts."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "description": (
+                "Application fields plus the applicant's history aggregates (leave history fields "
+                "empty for a first-time borrower). Ratio features are computed by the server."
+            )
+        },
+    )
+
+    @model_validator(mode="after")
+    def _history_consistent(self) -> ApplicantBase:
+        data = self.model_dump()
+        for prefix, total_name in (("BUR_", "BUR_COUNT"), ("PREV_", "PREV_COUNT")):
+            total = data.get(total_name)
+            given = [
+                k
+                for k, v in data.items()
+                if k.startswith(prefix) and k != total_name and v is not None
+            ]
+            if given and not total:
+                raise ValueError(
+                    f"{total_name} must be at least 1 when other {prefix}* fields are given "
+                    f"(got {total_name}={total} with {given[0]})"
+                )
+            for k in given:
+                if k.endswith("_COUNT") and total is not None and data[k] > total:
+                    raise ValueError(f"{k} ({data[k]:g}) cannot exceed {total_name} ({total:g})")
+        return self
 
 
 def build_applicant_model(meta: dict[str, Any]) -> type[BaseModel]:
@@ -51,19 +87,7 @@ def build_applicant_model(meta: dict[str, Any]) -> type[BaseModel]:
                     **_bounds(name, fi.kind),
                 ),
             )
-    return create_model(
-        "Applicant",
-        __config__=ConfigDict(
-            extra="forbid",
-            json_schema_extra={
-                "description": (
-                    "Application fields plus the applicant's history aggregates (leave history fields empty "
-                    "for a first-time borrower). Ratio features are computed by the server."
-                )
-            },
-        ),
-        **fields,
-    )
+    return create_model("Applicant", __base__=ApplicantBase, **fields)
 
 
 class ReasonOut(BaseModel):

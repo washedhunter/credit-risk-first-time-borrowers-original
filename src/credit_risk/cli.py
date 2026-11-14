@@ -76,6 +76,24 @@ def train(
     run_train(get_settings(), rebuild_features=rebuild_features)
 
 
+@app.command()
+def sample() -> None:
+    """Regenerate only data/sample/synthetic_applicants.csv (same code and seed as `train`)."""
+    import pandas as pd
+
+    from credit_risk.features.application import CATEGORICAL
+    from credit_risk.features.build import input_feature_columns
+    from credit_risk.modeling.split import holdout_split
+    from credit_risk.synth import write_sample
+
+    settings = get_settings()
+    df = pd.read_parquet(settings.features_path)
+    train_df, _ = holdout_split(df, settings.holdout_fraction, settings.seed)
+    path = settings.sample_dir / "synthetic_applicants.csv"
+    out = write_sample(train_df, input_feature_columns(df), CATEGORICAL, settings.seed, path)
+    print(f"Wrote {len(out)} synthetic applicants (0 copies of real rows) -> {path}")
+
+
 @app.command("compare-metrics")
 def compare_metrics(
     actual: Annotated[Path, typer.Argument(help="metrics.json from a fresh run.")] = Path(

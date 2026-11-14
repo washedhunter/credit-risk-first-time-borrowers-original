@@ -11,6 +11,9 @@ stratified on default × thin-file so the small thin-file segment appears in the
 both parts. Everything that involves a choice (hyper-parameters, imbalance strategy, threshold)
 is decided on the other 80% with 5-fold out-of-fold predictions. The hold-out is scored once,
 at the end. That way the reported numbers aren't inflated by choices made while looking at them.
+The out-of-fold numbers themselves are slightly optimistic (early stopping picks each fold's tree
+count on the fold it then predicts, and Optuna tuned on the same split); they are only used to
+*compare* options, and the reported performance is the hold-out's.
 
 **Bootstrap confidence intervals.** Only ~500 hold-out applicants are thin-file, with ~36 defaults.
 An AUC from 36 positives moves a lot by chance, so every hold-out metric comes with a 95%
@@ -106,7 +109,8 @@ upwards but doesn't rank borrowers better, and the cost-tuned threshold already 
 ## Threshold
 
 **Expected cost, in money, proportional to the loan.** Approving a borrower who defaults loses
-`LGD × loan amount` (LGD = 45%, the Basel foundation-IRB figure for senior unsecured exposures);
+`LGD × loan amount` (LGD = 45%, borrowed from the Basel II foundation-IRB value for senior unsecured exposures;
+illustrative, not a retail estimate);
 declining a borrower who would have repaid loses `margin × loan amount` (10%, an assumption for the
 lifetime profit of a consumer loan). Both are illustrative, not Home Credit's real economics, and
 both are environment variables. For a calibrated model the break-even probability is
@@ -134,9 +138,12 @@ sample; a test guards it), and `shap`/`numba` (hundreds of MB) stay out of the A
 affordability, bureau arrears, repayment record at Home Credit, ...) means three correlated
 features (say, the three external scores) give one reason instead of three. Each reason names its
 most influential feature and its value, e.g. "Late or short payments on earlier Home Credit loans
-(Share of instalments paid late: 31%)". When the driving feature is missing, the reason is the
-absence itself ("No credit-bureau record"), which is what "insufficient credit history" means for
-a first-time borrower.
+(Share of instalments paid late: 31%)". When a whole source of history is missing (no bureau rows,
+no previous applications, no external scores), the reason is the absence itself ("No credit-bureau
+record"), which is what "insufficient credit history" means for a first-time borrower. Absence is
+checked at group level, not from one missing feature: an applicant who has bureau loans but no
+recorded overdue amount must not be told they have no bureau record (the fresh-context review
+caught exactly that bug; a test now covers it).
 
 ## Serving
 
@@ -147,7 +154,9 @@ rejected (`extra="forbid"`, which also rejects protected attributes and the deri
 categorical fields restricted to the levels seen in training, and NaN/Infinity rejected. Only
 income and loan amount are required; history fields are optional because a first-time borrower
 has none. If fields that 99% of real applications have are missing, the response carries a
-warning, because the model hasn't seen inputs like that.
+warning, because the model hasn't seen inputs like that. Application amounts must be ≥ 0, and
+cross-field checks reject history aggregates sent without their count (e.g. `BUR_ACTIVE_COUNT`
+without `BUR_COUNT`) and sub-counts larger than the total.
 
 **The dashboard only talks to the API.** It never loads the model, so there's exactly one place
 where scoring happens. What-if sliders send modified applications to `/predict`; the server
@@ -166,15 +175,18 @@ Gaussian copula fitted on the training split's engineered features, per segment:
 each column's values become normal scores by rank; columns that are sometimes missing also get a
 "present/missing" latent; correlations are estimated pairwise; samples are mapped back through
 each column's interpolated percentiles. Values are smoothed population percentiles, so no row is a
-real applicant (a test checks no synthetic row equals a real one), while realistic patterns such
-as "all bureau fields missing together" are preserved. A few logical constraints are then
-enforced (e.g. active bureau loans ≤ all bureau loans). The sample is good for a demo, not for
+real applicant (`write_sample` refuses to save if any synthetic row equals a real training row on
+its continuous features), while realistic patterns such as "all bureau fields missing together"
+are preserved. A few logical constraints are then enforced (active bureau loans ≤ all bureau
+loans; no aggregates when a count is 0), the same rules the API enforces. The committed model
+metadata keeps the 1st-99th percentiles only, not min/max, which would be single real applicants.
+The sample is good for a demo, not for
 measuring accuracy; all reported metrics come from the real hold-out.
 
 ## Alternatives considered
 
 - **CatBoost / XGBoost:** both are common on this dataset (not benchmarked here); LightGBM was the
-  stack named in the resume and is the fastest of the three here.
+  stack named in the resume.
 - **SMOTE / undersampling:** resampling changes the class balance the model sees, just like
   `scale_pos_weight`, but adds synthetic or discards real rows; reweighting was the simpler
   comparison to make, and threshold tuning addresses the business question directly.

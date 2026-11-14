@@ -89,3 +89,19 @@ def test_end_to_end_training_on_fake_data(features, tmp_path, monkeypatch):
     )
     scores = model.score(records.to_dict(orient="records"))
     assert len(scores) == len(sample)
+
+
+def test_api_path_matches_training_feature_pipeline(features):
+    """Records an API client would send (input features only, NaN -> null) must produce the
+    exact frame the training pipeline (build_features -> prepare_frame) produced."""
+    from credit_risk.features.build import feature_columns
+    from credit_risk.scoring.frame import prepare_frame, records_to_frame
+
+    cols = feature_columns(features)
+    inputs = input_feature_columns(features)
+    categories = {c: sorted(features[c].dropna().unique().tolist()) for c in CATEGORICAL}
+    subset = features.sample(300, random_state=0).reset_index(drop=True)
+    records = subset[inputs].astype(object).where(subset[inputs].notna(), None)
+    api = records_to_frame(records.to_dict(orient="records"), cols, categories)
+    train = prepare_frame(subset, cols, categories)
+    pd.testing.assert_frame_equal(api, train)

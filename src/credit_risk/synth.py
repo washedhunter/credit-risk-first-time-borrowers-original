@@ -128,10 +128,13 @@ def _enforce_consistency(df: pd.DataFrame) -> pd.DataFrame:
     """Repair a few logical relations the copula can't guarantee."""
     df = df.copy()
     for prefix in ("BUR", "PREV"):
-        total = df[f"{prefix}_COUNT"]
-        for col in [c for c in df.columns if c.startswith(f"{prefix}_") and c.endswith("_COUNT")]:
-            if col != f"{prefix}_COUNT":
-                df[col] = np.minimum(df[col], total)
+        total_col = f"{prefix}_COUNT"
+        total = df[total_col]
+        others = [c for c in df.columns if c.startswith(f"{prefix}_") and c != total_col]
+        # No records -> no aggregates (the API rejects aggregates without a count).
+        df.loc[total.fillna(0) <= 0, others] = np.nan
+        for col in [c for c in others if c.endswith("_COUNT")]:
+            df[col] = np.minimum(df[col], total)
     shares = [c for c in df.columns if c.endswith(("_RATE", "_RATE_1Y"))]
     df[shares] = df[shares].clip(0, 1)
     for col in ("EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3"):
@@ -163,3 +166,38 @@ def make_synthetic_sample(
     out = _enforce_consistency(pd.concat(parts, ignore_index=True))
     out.insert(0, "SYNTHETIC_ID", [f"SYN-{i + 1:04d}" for i in range(len(out))])
     return out
+
+
+def copied_rows(sample: pd.DataFrame, real: pd.DataFrame, min_unique: int = 1000) -> int:
+    """Number of synthetic rows equal to some real row on every continuous column (should be 0)."""
+    cols = [
+        c
+        for c in sample.columns
+        if c in real.columns and real[c].dtype.kind == "f" and real[c].nunique() >= min_unique
+    ]
+    if not cols:
+        return 0
+
+    def keys(df: pd.DataFrame) -> set[tuple]:
+        return set(map(tuple, np.round(df[cols].astype("float64").fillna(-999.0).to_numpy(), 4)))
+
+    return len(keys(sample) & keys(real))
+
+
+def write_sample(
+    train: pd.DataFrame,
+    input_features: Sequence[str],
+    categorical: Sequence[str],
+    seed: int,
+    path,
+) -> pd.DataFrame:
+    """Generate, privacy-check and save the synthetic sample (used by `train` and `sample`)."""
+    sample = make_synthetic_sample(train, input_features, categorical, seed)
+    copies = copied_rows(sample, train)
+    if copies:
+        raise AssertionError(
+            f"{copies} synthetic rows equal a real applicant; not writing the sample"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sample.to_csv(path, index=False, float_format="%.6g", lineterminator=chr(10))
+    return sample

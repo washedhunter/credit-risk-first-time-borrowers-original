@@ -82,6 +82,27 @@ def test_batch_matches_single(samples):
             "less than or equal to 1",
         ),
         ({"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 5e4, "CODE_GENDER": "F"}, "Extra inputs"),
+        (
+            {"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 5e4, "AMT_ANNUITY": -5000},
+            "greater than or equal to 0",
+        ),
+        (
+            {"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 5e4, "BUR_ACTIVE_COUNT": 1},
+            "BUR_COUNT must be at least 1",
+        ),
+        (
+            {"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 5e4, "BUR_COUNT": 1, "BUR_ACTIVE_COUNT": 3},
+            "cannot exceed BUR_COUNT",
+        ),
+        (
+            {
+                "AMT_CREDIT": 100000,
+                "AMT_INCOME_TOTAL": 5e4,
+                "PREV_COUNT": 0,
+                "PREV_REFUSED_RATE": 0.5,
+            },
+            "PREV_COUNT must be at least 1",
+        ),
     ],
 )
 def test_validation_errors(payload, fragment):

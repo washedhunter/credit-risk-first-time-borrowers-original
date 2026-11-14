@@ -30,13 +30,38 @@ def test_groups_are_summed_and_ranked():
     assert "lowered the risk" in strengths[0].text
 
 
-def test_missing_history_becomes_the_reason():
-    risks, _ = reason_codes(
-        {"PREV_AMT_ANNUITY_MEAN": 0.2, "EXT_SOURCE_1": 0.1},
-        {"PREV_AMT_ANNUITY_MEAN": None, "EXT_SOURCE_1": None},
-    )
-    assert risks[0].text.startswith("No earlier Home Credit applications on file")
-    assert risks[1].text.startswith("External credit score not available")
+def test_missing_history_becomes_the_reason_only_when_truly_absent():
+    contributions = {
+        "PREV_AMT_ANNUITY_MEAN": 0.2,
+        "EXT_SOURCE_1": 0.1,
+        "BUR_AMT_MAX_OVERDUE_MAX": 0.05,
+    }
+    # First-time borrower: no bureau rows, no previous applications, no external scores.
+    thin = {"BUR_COUNT": 0, "PREV_COUNT": 0}
+    risks, _ = reason_codes(contributions, thin)
+    texts = [r.text for r in risks]
+    assert texts[0].startswith("No earlier Home Credit applications on file")
+    assert texts[1].startswith("No external credit scores available")
+    assert texts[2].startswith("No credit-bureau record")
+
+    # Has history, but the top feature happens to be missing (never overdue, one score absent).
+    has_history = {
+        "BUR_COUNT": 2,
+        "PREV_COUNT": 3,
+        "EXT_SOURCE_2": 0.4,
+        "PREV_AMT_ANNUITY_MEAN": None,
+    }
+    risks, _ = reason_codes(contributions, has_history)
+    texts = " ".join(r.text for r in risks)
+    assert "No credit-bureau record" not in texts
+    assert "No earlier Home Credit applications" not in texts
+    assert "No external credit scores" not in texts
+    assert "not on file" in texts
+
+
+def test_absence_as_a_strength():
+    _, strengths = reason_codes({"CC_UTILISATION_MEAN": -0.3}, {"CC_MONTHS": None})
+    assert strengths[0].text == "Credit-card usage: no record on file, which lowered the risk."
 
 
 def test_format_value():

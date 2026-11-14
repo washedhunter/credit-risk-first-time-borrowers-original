@@ -9,16 +9,36 @@ from typing import Any
 
 from credit_risk.scoring.feature_info import GROUPS, format_value, info
 
-# When the most influential feature in a group is missing, the reason is the absence itself
-# (e.g. "insufficient credit history"), which is the typical case for first-time borrowers.
+# Sentences for when a whole source of history is absent (e.g. "insufficient credit history"),
+# the typical case for first-time borrowers. Used only if `_absent` confirms the absence at
+# group level; a single missing feature (say, no overdue amount ever recorded) is not enough.
 MISSING_SENTENCES = {
     "bureau_history": "No credit-bureau record: no loans with other lenders on file",
     "bureau_arrears": "No credit-bureau record: no loans with other lenders on file",
     "hc_applications": "No earlier Home Credit applications on file",
     "hc_repayment": "No repayment history on earlier Home Credit loans",
     "card_usage": "No Home Credit credit-card history",
-    "external_scores": "External credit score not available",
+    "external_scores": "No external credit scores available",
 }
+
+
+def _none_or_zero(values: Mapping[str, Any], *names: str) -> bool:
+    return all(values.get(n) in (None, 0, 0.0) for n in names)
+
+
+def _absent(group: str, values: Mapping[str, Any]) -> bool:
+    """Is the whole source of information behind this group missing for the applicant?"""
+    if group in ("bureau_history", "bureau_arrears"):
+        return _none_or_zero(values, "BUR_COUNT")
+    if group == "hc_applications":
+        return _none_or_zero(values, "PREV_COUNT")
+    if group == "hc_repayment":
+        return _none_or_zero(values, "INST_COUNT", "POS_MONTHS", "CC_MONTHS")
+    if group == "card_usage":
+        return _none_or_zero(values, "CC_MONTHS")
+    if group == "external_scores":
+        return all(values.get(f"EXT_SOURCE_{i}") is None for i in (1, 2, 3))
+    return False
 
 
 @dataclass
@@ -57,14 +77,17 @@ def reason_codes(
         raw = values.get(name)
         value = format_value(name, raw)
         missing = value == "not available"
-        if total > 0 and missing and group in MISSING_SENTENCES:
+        absent = group in MISSING_SENTENCES and _absent(group, values)
+        if total > 0 and absent:
             text = f"{MISSING_SENTENCES[group]}."
         elif total > 0 and missing:
-            text = f"{risk_sentence} ({feature_label}: not provided)."
+            text = f"{risk_sentence} ({feature_label}: not on file)."
         elif total > 0:
             text = f"{risk_sentence} ({feature_label}: {value})."
+        elif absent:
+            text = f"{label}: no record on file, which lowered the risk."
         elif missing:
-            text = f"{label}: nothing adverse on file, which lowered the risk ({feature_label}: not provided)."
+            text = f"{label} lowered the risk ({feature_label}: not on file)."
         else:
             text = f"{label} lowered the risk ({feature_label}: {value})."
         return Reason(group, text, round(total, 4), name, feature_label, value)

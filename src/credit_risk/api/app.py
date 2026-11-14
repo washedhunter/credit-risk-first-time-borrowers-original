@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pandas as pd
-from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -181,11 +181,12 @@ def predict(
     tags=["scoring"],
 )
 def predict_batch(
-    applicants: Annotated[list[Applicant], Body(embed=True)],  # type: ignore[valid-type]
+    applicants: Annotated[
+        list[Applicant],  # type: ignore[valid-type]
+        Body(embed=True, min_length=1, max_length=MAX_BATCH),
+    ],
 ) -> BatchPrediction:
     """Score up to 1,000 applicants in one call."""
-    if not 1 <= len(applicants) <= MAX_BATCH:
-        raise HTTPException(status_code=422, detail=f"Send between 1 and {MAX_BATCH} applicants.")
     scores = model.score([a.model_dump() for a in applicants])
     return BatchPrediction(
         model_version=model.version, predictions=[_to_prediction(s, False) for s in scores]

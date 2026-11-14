@@ -28,7 +28,7 @@ Everything below comes from one run of `uv run credit-risk train` (full output i
 | No bureau record | LightGBM | 8,916 | 0.790 [0.774, 0.804] | 0.316 [0.287, 0.346] | 0.440 | 0.079 |
 | **Thin-file** | LightGBM | 494 | **0.819** [0.756, 0.878] | 0.301 [0.192, 0.454] | 0.514 | 0.060 |
 
-**The thin-file gap.** Only 2,470 of 307,511 applicants (0.8%) are thin-file, so the hold-out has 494 of them and just 36 defaults. Their ROC-AUC is *not* worse than the overall figure: 0.819 on the hold-out and 0.806 [0.776, 0.840] out-of-fold on the 1,976 thin-file applicants in the training split. The confidence interval is wide, though (0.756 to 0.878), so the honest conclusion is "no evidence the model ranks first-time borrowers worse". The application data, the external scores and the employment fields carry most of the signal for them. The larger "no bureau record" group (8,916 in the hold-out, 10.1% default rate) has the same AUC as everyone else but a higher default rate, and the model declines more of it.
+**The thin-file gap.** Only 2,470 of 307,511 applicants (0.8%) are thin-file, so the hold-out has 494 of them and just 36 defaults. Their ROC-AUC is *not* worse than the overall figure: 0.819 on the hold-out and 0.806 [0.776, 0.840] out-of-fold on the 1,976 thin-file applicants in the training split. The confidence interval is wide, though (0.756 to 0.878), so the honest conclusion is "no evidence the model ranks first-time borrowers worse". The application data, the external scores and the employment fields carry most of the signal for them. The larger "no bureau record" group (8,916 in the hold-out, 10.0% default rate there) has the same AUC as everyone else but a higher default rate, and the model declines more of it.
 
 **Class imbalance** (out-of-fold, training split): reweighting didn't help ranking (ROC-AUC 0.7907 none, 0.7897 sqrt, 0.7886 balanced). It made the probabilities badly over-confident: the mean prediction was 37% under "balanced" against an 8% real default rate. No reweighting plus a tuned threshold had the lowest expected cost, so that's the model.
 
@@ -95,7 +95,7 @@ uv run credit-risk train
 uv run credit-risk compare-metrics
 ```
 
-`train` rewrites `models/`, `reports/`, `docs/img/` and the synthetic sample. `compare-metrics` checks the new hold-out metrics against the committed ones (tolerance 0.005; 0.02 for the small thin-file segment). `uv run credit-risk tune` re-runs the 40-trial Optuna search (about 20 minutes) and `uv run pytest` runs the tests. Neither needs Kaggle.
+`train` rewrites `models/`, `reports/`, `docs/img/` and the synthetic sample (`uv run credit-risk sample` regenerates only the sample). `compare-metrics` checks the new hold-out metrics against the committed ones (tolerance 0.005; 0.02 for the small thin-file segment). `uv run credit-risk tune` re-runs the 40-trial Optuna search (about 20 minutes) and `uv run pytest` runs the tests. Neither needs Kaggle.
 
 **API example** (with the stack running; works in PowerShell and bash):
 
@@ -121,7 +121,7 @@ Thin-file: True   model: lgbm-2026-11-14-f93e6388
 
 - **Source.** [Home Credit Default Risk](https://www.kaggle.com/competitions/home-credit-default-risk) on Kaggle: `application_train` (307,511 rows), `bureau`, `bureau_balance`, `previous_application`, `installments_payments`, `POS_CASH_balance` and `credit_card_balance`. Kaggle's test set has no labels, so evaluation uses the stratified hold-out.
 - **Not in this repo.** The raw data isn't committed; competition data can't be redistributed. `credit-risk download` fetches it with your own token.
-- **Synthetic sample.** [`data/sample/synthetic_applicants.csv`](data/sample/synthetic_applicants.csv) holds 300 **synthetic** applicants (60 thin-file, 60 with no bureau record, 180 with one), drawn from a Gaussian copula fitted on the training split's features. They're realistic enough to demo the app and run CI, but they are not real people, and no row equals a real applicant (checked). No metric in this README is computed on them.
+- **Synthetic sample.** [`data/sample/synthetic_applicants.csv`](data/sample/synthetic_applicants.csv) holds 300 **synthetic** applicants (60 thin-file, 60 with Home Credit history but no bureau record, 180 with a bureau record), drawn from a Gaussian copula fitted on the training split's features. They're realistic enough to demo the app and run CI, but they are not real people: `train` (and `credit-risk sample`) refuse to write the file if any row equals a real applicant on its continuous features. No metric in this README is computed on them.
 
 ## Project structure
 
@@ -158,9 +158,10 @@ The full reasoning is in [docs/DECISIONS.md](docs/DECISIONS.md). In short:
 
 ## Limitations and next steps
 
-- **Thin-file uncertainty.** 36 defaults in the hold-out isn't much evidence. A real lender would monitor this segment after launch rather than trust a 0.06-wide interval.
+- **Thin-file uncertainty.** 36 defaults in the hold-out isn't much evidence. A real lender would monitor this segment after launch rather than trust an interval of ±0.06 AUC.
 - **Illustrative costs.** LGD 45% and margin 10% are assumptions, not Home Credit's economics. Real figures would change the threshold (see the sensitivity table).
 - **Proxies for protected attributes** remain (occupation, employer type, years employed). The audit only checks outcomes; it doesn't remove indirect effects.
+- **Out-of-fold numbers are slightly optimistic.** Early stopping picks each fold's tree count on the fold it then predicts, and Optuna tuned on the same split. This affects the imbalance comparison, the threshold choice and the thin-file "larger-sample check". The hold-out numbers are clean.
 - **Single random split, single seed.** Repeated CV over several seeds would tighten the comparison between imbalance strategies, which are within 0.002 AUC of each other.
 - **Tuning.** `min_child_samples` ended near the top of its search range (489 of 500). A wider search might gain a little.
 - **Synthetic sample.** The copula keeps pairwise correlations and co-missingness but not every logical rule. A few rows trigger the API's sparse-input warning.
