@@ -71,6 +71,9 @@ employer type, years in the job all correlate with age and gender). So gender an
 among approved loans by group. The audit table is in the README. It shows differences in approval
 rates that track the differences in actual default rates; whether those are acceptable is a
 policy decision a real lender would have to make (and document), not something a model can settle.
+In this run the mean predicted score is slightly above the actual default rate for women
+(7.3% vs 7.0%) and slightly below it for men (9.3% vs 10.1%), so women aren't penalised
+relative to their observed risk.
 
 ## Model
 
@@ -95,7 +98,10 @@ gain a little more, but the second search only moved CV AUC by 0.001.
 `scale_pos_weight = sqrt(neg/pos)` and `scale_pos_weight = neg/pos` ("balanced"). Reweighting
 inflates the predicted probabilities (the model is no longer calibrated), which matters because
 the approval rule compares a probability with a cost-derived threshold. The strategy with the
-lowest out-of-fold expected cost is used; see the README for which one won and by how much.
+lowest out-of-fold expected cost is used. In the committed run, **no reweighting** won: best ROC-AUC
+(0.7907 vs 0.7897 sqrt and 0.7886 balanced), calibrated probabilities (mean prediction 8.0% vs an 8.1%
+default rate; 37% under "balanced"), and the lowest expected cost. Reweighting shifts the scores
+upwards but doesn't rank borrowers better, and the cost-tuned threshold already handles the imbalance.
 
 ## Threshold
 
@@ -119,9 +125,10 @@ separate cut-off for one group of customers is a policy choice that needs its ow
 
 **SHAP (TreeSHAP).** Exact per-applicant attributions for tree models, in log-odds, that add up to
 the model's output. Training produces the global summary (beeswarm), the mean-|SHAP| bar chart
-and an example waterfall with the `shap` package. The API uses LightGBM's built-in
-`pred_contrib=True`, which is the same TreeSHAP algorithm. A test checks the two agree to 1e-6,
-and it keeps `shap`/`numba` (hundreds of MB) out of the API image.
+and an example waterfall with the `shap` package. The API calls LightGBM's built-in
+`pred_contrib=True` directly. For LightGBM models `shap.TreeExplainer` calls exactly that function
+(see `shap/explainers/_tree.py`), so the values are identical (max difference 0.0 on the hold-out
+sample; a test guards it), and `shap`/`numba` (hundreds of MB) stay out of the API image.
 
 **Reason codes are grouped.** Summing SHAP values within ~12 reason groups (external scores,
 affordability, bureau arrears, repayment record at Home Credit, ...) means three correlated
