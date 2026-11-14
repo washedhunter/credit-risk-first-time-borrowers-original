@@ -24,12 +24,13 @@ def prepare_frame(
 
     Unknown categories become missing, which LightGBM routes like any other missing value.
     """
-    out = pd.DataFrame(index=df.index)
     columns = {}
     for name in features:
         if name in categories:
+            levels = list(categories[name])
             values = df[name] if name in df else pd.Series(None, index=df.index, dtype="object")
-            columns[name] = pd.Categorical(values, categories=list(categories[name]))
+            values = values.astype("object").where(values.isin(levels), None)  # unknown -> missing
+            columns[name] = pd.Categorical(values, categories=levels)
         else:
             values = df[name] if name in df else pd.Series(np.nan, index=df.index)
             columns[name] = pd.to_numeric(values, errors="coerce").astype("float64")
