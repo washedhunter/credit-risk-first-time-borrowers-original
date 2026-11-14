@@ -290,7 +290,7 @@ with left:
             },
         )
     )
-    gauge.update_layout(height=220, margin={"l": 20, "r": 20, "t": 10, "b": 10})
+    gauge.update_layout(height=220, margin={"l": 30, "r": 40, "t": 10, "b": 10})
     st.plotly_chart(gauge, width="stretch")
     st.caption(f"Black line = decline threshold ({fmt_pct(THRESHOLD)}).")
     if result["thin_file"]:
@@ -317,22 +317,39 @@ with right:
     values = top.to_numpy()[::-1].tolist()
     names = ["Other features", *names]
     values = [rest, *values]
+    base_value = expl["base_value"]
     fig = go.Figure(
         go.Waterfall(
             orientation="h",
-            y=["Average applicant", *names, "This applicant"],
-            x=[expl["base_value"], *values, 0],
-            measure=["absolute", *["relative"] * len(values), "total"],
+            y=[*names, "This applicant"],
+            x=[*values, 0],
+            base=base_value,  # bars start at the average applicant's log-odds
+            measure=[*["relative"] * len(values), "total"],
             increasing={"marker": {"color": "#c0392b"}},
             decreasing={"marker": {"color": "#1a7f37"}},
             totals={"marker": {"color": "#1f4e79"}},
         )
     )
+    threshold_logit = math.log(THRESHOLD / (1 - THRESHOLD))
+    fig.add_vline(
+        x=base_value,
+        line_dash="dot",
+        line_color="grey",
+        annotation_text="average applicant",
+        annotation_position="bottom left",
+    )
+    fig.add_vline(
+        x=threshold_logit,
+        line_dash="dash",
+        line_color="black",
+        annotation_text="decline threshold",
+        annotation_position="top right",
+    )
     fig.update_layout(
         title="SHAP waterfall: red raises risk, green lowers it",
-        height=520,
+        height=540,
         margin={"l": 10, "r": 10, "t": 40, "b": 10},
-        xaxis_title="log-odds of default",
+        xaxis_title="log-odds of default (right = riskier)",
     )
     st.plotly_chart(fig, width="stretch")
 

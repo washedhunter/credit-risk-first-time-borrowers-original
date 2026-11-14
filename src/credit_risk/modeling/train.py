@@ -272,7 +272,7 @@ def train(
         expl,
         example,
         img / "shap_waterfall.png",
-        title=f"One declined hold-out applicant: P(default) = {p_shap[example]:.2f} (threshold {threshold:.3f})",
+        title=f"A declined hold-out applicant: P(default) = {p_shap[example]:.3f}, threshold {threshold:.3f} (log-odds)",
     )
     timings["shap_s"] = time.perf_counter() - t0
 

@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pandas as pd
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from credit_risk.api.schemas import (
     MAX_BATCH,
@@ -64,6 +67,24 @@ app = FastAPI(
         "plain-English reason codes from TreeSHAP. Sample applicants are **synthetic**."
     ),
 )
+
+
+def _json_safe(obj: Any) -> Any:
+    """Validation errors echo the input; NaN/Infinity there would make the error itself invalid JSON."""
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422, content={"detail": _json_safe(jsonable_encoder(exc.errors()))}
+    )
 
 
 def _to_prediction(s: Score, explain: bool) -> Prediction:

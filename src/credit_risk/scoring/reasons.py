@@ -12,8 +12,8 @@ from credit_risk.scoring.feature_info import GROUPS, format_value, info
 # When the most influential feature in a group is missing, the reason is the absence itself
 # (e.g. "insufficient credit history"), which is the typical case for first-time borrowers.
 MISSING_SENTENCES = {
-    "bureau_history": "No credit-bureau record (no loans with other lenders on file)",
-    "bureau_arrears": "No credit-bureau record (no loans with other lenders on file)",
+    "bureau_history": "No credit-bureau record: no loans with other lenders on file",
+    "bureau_arrears": "No credit-bureau record: no loans with other lenders on file",
     "hc_applications": "No earlier Home Credit applications on file",
     "hc_repayment": "No repayment history on earlier Home Credit loans",
     "card_usage": "No Home Credit credit-card history",
@@ -57,8 +57,10 @@ def reason_codes(
         raw = values.get(name)
         value = format_value(name, raw)
         missing = value == "not available"
-        if total > 0 and missing:
-            text = f"{MISSING_SENTENCES.get(group, risk_sentence)} ({feature_label}: not provided)."
+        if total > 0 and missing and group in MISSING_SENTENCES:
+            text = f"{MISSING_SENTENCES[group]}."
+        elif total > 0 and missing:
+            text = f"{risk_sentence} ({feature_label}: not provided)."
         elif total > 0:
             text = f"{risk_sentence} ({feature_label}: {value})."
         elif missing:

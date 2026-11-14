@@ -78,18 +78,31 @@ def train(
 
 @app.command("compare-metrics")
 def compare_metrics(
+    actual: Annotated[Path, typer.Argument(help="metrics.json from a fresh run.")] = Path(
+        "reports/metrics.json"
+    ),
     expected: Annotated[
-        Path, typer.Argument(help="Reference metrics.json (e.g. the committed one).")
-    ],
-    actual: Annotated[Path, typer.Argument(help="metrics.json from a fresh run.")],
+        Path | None,
+        typer.Option(help="Reference metrics.json. Default: the committed version (git HEAD)."),
+    ] = None,
     tol: Annotated[float, typer.Option(help="Allowed absolute difference per metric.")] = 0.005,
 ) -> None:
-    """Check that a re-run reproduces the reported hold-out metrics within `tol`."""
+    """Check that a re-run reproduces the committed hold-out metrics within `tol`."""
     import json
+    import subprocess
 
     from credit_risk.modeling.compare import compare
 
-    rows, ok = compare(json.loads(expected.read_text()), json.loads(actual.read_text()), tol)
+    if expected is None:
+        committed = subprocess.run(
+            ["git", "show", "HEAD:reports/metrics.json"], capture_output=True, text=True, check=True
+        ).stdout
+        reference = json.loads(committed)
+        print("Reference: reports/metrics.json at git HEAD")
+    else:
+        reference = json.loads(expected.read_text(encoding="utf-8"))
+    rows, ok = compare(reference, json.loads(actual.read_text(encoding="utf-8")), tol)
+    print(f"{'':5}{'metric':<55}{'reference':>10}{'this run':>10}{'diff':>9}")
     for name, a, b, diff, passed in rows:
         print(f"{'ok  ' if passed else 'FAIL'} {name:<55} {a:>9.4f} {b:>9.4f} {diff:+.4f}")
     print("All within tolerance." if ok else "Some metrics differ by more than the tolerance.")

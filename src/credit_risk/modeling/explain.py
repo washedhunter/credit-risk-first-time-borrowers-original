@@ -68,9 +68,10 @@ def waterfall(explanation: shap.Explanation, index: int, path: Path, title: str)
     row = labelled[index]
     plt.figure()
     shap.plots.waterfall(row, max_display=12, show=False)
-    plt.title(title)
-    plt.gcf().set_size_inches(10, 6.5)
-    plt.tight_layout()
+    fig = plt.gcf()
+    fig.set_size_inches(11, 6.5)
+    fig.suptitle(title, x=0.02, ha="left", fontsize=11)
+    fig.tight_layout(rect=(0, 0, 0.97, 0.95))
     plt.savefig(path, dpi=130)
     plt.close("all")
 

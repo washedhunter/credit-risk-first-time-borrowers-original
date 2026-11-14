@@ -4,7 +4,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /bin/uv
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_NO_CACHE=1
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --extra api --no-install-project
 COPY src ./src
