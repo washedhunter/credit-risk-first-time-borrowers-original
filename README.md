@@ -4,6 +4,16 @@ A loan-default model trained on 307,511 real applications from the Home Credit D
 with an approval threshold tuned against the cost of bad loans versus rejected good customers,
 plain-English SHAP reason codes for every decision, a FastAPI service and a Streamlit dashboard for loan officers.
 
+## At a glance
+
+| | |
+|---|---|
+| **Problem** | Lenders find it hard to judge first-time borrowers, who have little or no credit history. |
+| **What it does** | Predicts the chance that a loan applicant defaults, approves or declines using a cut-off chosen by business cost, and gives a plain-English reason for every decision, through an API and a dashboard for loan officers. |
+| **Result** | Trained on **307,511 real loan applications**; ROC-AUC 0.79 (0.82 for first-time borrowers, small sample). Approving 89% of applicants cuts the default rate among approved loans from 8.1% to 5.4%. |
+| **Built with** | Python, Pandas, LightGBM, SHAP, FastAPI, Streamlit, Docker, pytest, GitHub Actions |
+| **See it** | Dashboard screenshot below; `docker compose up` runs the API and dashboard ([Quickstart](#quickstart)). |
+
 ![Dashboard: a declined applicant with reason codes, what-if sliders and a SHAP waterfall](docs/img/dashboard_sample.png)
 
 <sub>Screenshot of the running app (`docker compose up`). The applicant shown is **synthetic** (see [Data](#data)).</sub>
