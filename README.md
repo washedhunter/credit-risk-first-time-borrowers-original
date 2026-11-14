@@ -142,7 +142,7 @@ reports/metrics.{md,json}  # every number in this README
 docs/DECISIONS.md          # why each choice was made
 docker/, compose.yaml      # API + dashboard images
 scripts/screenshots.py     # Playwright screenshots of the running stack
-tests/                     # 46 tests: features, metrics, threshold, reasons, API, synthetic data, end-to-end training on fake tables
+tests/                     # 52 tests: features, metrics, threshold, reasons, API, synthetic data, end-to-end training on fake tables
 ```
 
 ## Design decisions and trade-offs
