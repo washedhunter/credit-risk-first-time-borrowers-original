@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --locked --all-extras
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Tests (no Kaggle data needed; committed model + synthetic sample + fake raw tables)
+        run: uv run pytest --cov=credit_risk --cov-report=term-missing
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and start the stack
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Smoke test API and dashboard
+        run: |
+          curl -fsS http://localhost:8000/health
+          curl -fsS "http://localhost:8000/samples?limit=1" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)[0]['applicant']))" > applicant.json
+          curl -fsS -X POST http://localhost:8000/predict -H 'content-type: application/json' -d @applicant.json
+          curl -fsS http://localhost:8000/docs > /dev/null
+          curl -fsS http://localhost:8501/_stcore/health
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop
+        if: always()
+        run: docker compose down
