@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    image: credit-risk-api
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    image: credit-risk-dashboard
+    environment:
+      API_URL: http://api:8000              # container-to-container
+      PUBLIC_API_URL: http://localhost:8000 # links shown in the browser
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
